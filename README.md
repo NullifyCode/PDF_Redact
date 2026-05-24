@@ -8,7 +8,7 @@ Sensitive numbers are physically erased from the PDF structures—not merely cov
 
 ## Key Features
 
-- **🎨 Premium Visual Branding:** Designed with a modern, high-contrast user interface tailored in a sleek deep navy and crimson palette. Equipped with crisp, multi-size high-DPI desktop assets and High-DPI Windows awareness for razor-sharp rendering.
+- **🖥️ High-DPI Windows Support:** Includes crisp, multi-size high-DPI desktop assets and High-DPI Windows awareness for razor-sharp rendering across high-resolution displays.
 - **🔍 Multi-Pass Engine:** Detects sensitive data across three comprehensive layers:
   1. **Selectable Text Layer:** Executes high-speed regex queries on PDF text objects.
   2. **AcroForm Fields:** Reads and cleans active form elements directly, including split-digit forms (e.g., IRS Form 1040 layout where SSNs span three separate widget boxes).
