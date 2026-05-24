@@ -4,6 +4,8 @@ Nullify is a professional, high-performance desktop utility designed to scan PDF
 
 Sensitive numbers are physically erased from the PDF structures—not merely covered with a black block—rendering them 100% unrecoverable by text selection, copy-pasting, visual extraction, or metadata parsing.
 
+![Nullify GUI Desktop Application Interface](screenshot.png)
+
 ---
 
 ## Key Features
