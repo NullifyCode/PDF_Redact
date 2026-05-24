@@ -347,6 +347,10 @@ class RedactApp(tk.Tk):
                                     bg=PANEL, font=FONT_STATUS, fg=TEXT_DIM)
         self._status_lbl.pack(side="left", padx=(5, 0))
 
+        license_lbl = tk.Label(bar, text="GNU GPL v3", bg=PANEL,
+                               font=FONT_STATUS, fg=TEXT_DIM)
+        license_lbl.pack(side="right")
+
     # ── Widget factories ──────────────────────────────────────────────────────
 
     def _section_label(self, parent, text: str):
