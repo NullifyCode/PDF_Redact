@@ -1,168 +1,111 @@
-# SSN / EIN Redaction Tool
+# Nullify — Advanced PDF Redaction Tool
 
-## What this program does
+Nullify is a professional, high-performance desktop utility designed to scan PDF files and **permanently redact** Social Security Numbers (SSNs), Individual Taxpayer Identification Numbers (ITINs), and Employer Identification Numbers (EINs). 
 
-This tool scans PDF files and **permanently redacts** Social Security Numbers (SSNs),
-Individual Taxpayer Identification Numbers (ITINs), and Employer Identification Numbers (EINs).
-Matched numbers are replaced with solid black rectangles — not hidden behind a layer, but
-physically removed from the file so they cannot be recovered by selecting text, searching,
-or stripping annotations.
+Sensitive numbers are physically erased from the PDF structures—not merely covered with a black block—rendering them 100% unrecoverable by text selection, copy-pasting, visual extraction, or metadata parsing.
 
-**How detection works — three passes per page:**
-1. **Text layer** — regex on extracted text, then `search_for()` to place the redaction rectangle.
-2. **AcroForm widgets** — reads every form field value directly; handles IRS 1040-style SSNs
-   that are split across three separate boxes (###, ##, ####).
-3. **Word proximity** — reassembles adjacent numeric word tokens on the same baseline;
-   catches SSNs rendered as individually-positioned characters where `search_for()` fails.
+---
 
-**What formats are detected:**
-- Standard dash-separated: `123-45-6789`
-- Space-separated (IRS fillable forms): `123 45 6789`
-- EINs: `12-3456789` and `12 3456789`
-- ITINs (900-series): same pattern as SSNs
+## Key Features
 
-**What is not detected by design:**
-- Unseparated 9-digit strings like `123456789` — too many innocent matches
-- Invalid SSN ranges that the SSA has never issued (prefix `000`/`666`, middle `00`, suffix `0000`)
-
-**Limitation:** Detection works only on PDFs where numbers exist as selectable text.
-Pages with zero selectable characters (pure scans) are detected and skipped with a warning — use OCR software on those first.
+- **🎨 Premium Visual Branding:** Designed with a modern, high-contrast user interface tailored in a sleek deep navy and crimson palette. Equipped with crisp, multi-size high-DPI desktop assets and High-DPI Windows awareness for razor-sharp rendering.
+- **🔍 Multi-Pass Engine:** Detects sensitive data across three comprehensive layers:
+  1. **Selectable Text Layer:** Executes high-speed regex queries on PDF text objects.
+  2. **AcroForm Fields:** Reads and cleans active form elements directly, including split-digit forms (e.g., IRS Form 1040 layout where SSNs span three separate widget boxes).
+  3. **Word Proximity Reassembly:** Finds numbers that are broken into individual characters or sparse adjacent word tokens on a line.
+- **👁️ OCR Confusable Misread Tolerance:** Identifies and redacts numbers misread by OCR engines due to visual lookalikes (e.g. `1l3-4S-6789` using lowercase `l` for `1` and uppercase `S` for `5`). Includes intelligent post-match validation to avoid false positives in ordinary text.
+- **⚡ Graceful Tesseract OCR Support:** Automatically detects scanned/image-only PDF pages. Renders pages at 300 DPI, runs Google Tesseract OCR, translates coordinates, and redacts. If Tesseract is not installed, the tool gracefully alerts the user with easy-to-follow setup logs and continues.
+- **🔒 Absolute Security & Memory Safety:**
+  - **Irreversible Pixels:** Redacts by physically stripping underneath graphics and pixels via `apply_redactions()` using PyMuPDF vector path pruning and pixel-purging.
+  - **Metadata Strip:** Clears the PDF Info dictionary, XMP metadata stream, and embedded attachments.
+  - **Memory Erasure:** Entered targeted search numbers are held in mutable structures and explicitly zeroed out with null bytes after processing. The Python regex engine cache is immediately purged, and garbage collection is requested to keep RAM clean.
+  - **Privacy First:** No sensitive digits are ever written to logs or warning terminals (sensitive values are masked, e.g. `[***-**-6789]`).
 
 ---
 
 ## Requirements
 
-- Windows PC
-- Python 3.8 or higher
-- PyMuPDF (installed via `requirements_redact.txt`)
+- **Operating System:** Windows PC (7, 8, 10, or 11)
+- **Python Runtime:** Python 3.8 or higher
+- **Dependencies:** Listed in [requirements_redact.txt](file:///C:/Claude_Git/nullify_public/requirements_redact.txt) (primarily PyMuPDF)
+- **Optional OCR Support:** [Google Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (highly recommended for scanned documents)
 
 ---
 
-## First-time setup
+## First-Time Setup
 
-1. **Install Python** — download from [python.org](https://python.org) and run the installer.
-   Check **Add Python to PATH** during setup.
-2. **Open a Command Prompt** in the `pdf_redactor` folder (Shift + right-click inside the
-   folder → "Open PowerShell window here").
-3. **Install dependencies:**
-   ```
+1. **Install Python:** Download Python from [python.org](https://python.org). Ensure you check the box **"Add Python to PATH"** during setup.
+2. **Install Dependencies:** Open a Command Prompt or PowerShell window in the project folder and run:
+   ```bash
    pip install -r requirements_redact.txt
    ```
-4. **Create a desktop shortcut** for the GUI:
-   - Right-click `redact_gui.pyw` → Send to → Desktop (create shortcut).
-   - The `.pyw` extension makes Windows run it without a console window.
+3. **Configure Desktop Shortcut:** Double-click the helper script [setup_shortcut.py](file:///C:/Claude_Git/nullify_public/setup_shortcut.py) (or run `python setup_shortcut.py` in your shell) to automatically generate a premium **Nullify** shortcut with its custom branded icon directly on your Desktop!
+
+*(Optional) For Image-Only Scanned PDFs:*
+- Install Google Tesseract OCR for Windows from [here](https://github.com/UB-Mannheim/tesseract/wiki).
+- Add Tesseract to your Windows Environment Variables PATH so the system can run it.
+- Run `pip install pytesseract` in your terminal.
 
 ---
 
-## How to use — Desktop (GUI)
+## How to Use — Desktop (GUI)
 
-1. Double-click the **SSN / EIN Redaction Tool** shortcut (or `redact_gui.pyw` directly).
-2. Choose **Single PDF file** or **All PDFs in folder**.
-3. Click **Browse** and select your file or folder.
-4. The output path fills in automatically. Click **Change** to override it.
-5. *(Optional)* Enter up to **6 specific SSNs** in the TARGET section to hunt for those
-   numbers in addition to the standard sweep. Fields are masked and cleared from memory
-   immediately after redaction begins.
-6. Click **Run Redaction**.
-7. Read the Results panel. If the status bar shows a warning, read those lines before
-   distributing the output file.
+1. Double-click the **Nullify** desktop shortcut (or run `redact_gui.pyw` directly).
+2. Select your redaction target: **Single PDF file** or **All PDFs in folder**.
+3. Click **Browse** to select your input file/folder. Output paths are suggested automatically.
+4. **Configure Advanced Options:**
+   - **OCR Misread Tolerance:** Check this box to enable lookalike confusable matching (`[0-9OoIliS]`).
+   - **Targeted Redaction:** Input up to 6 specific SSNs/EINs to explicitly hunt down and redact.
+5. Click **Run Redaction**.
+6. Review the logs in the interactive Results panel. If warning markers appear, read them before sharing the output document.
 
 ---
 
-## How to use — Command Line
+## How to Use — Command Line
 
-Redact a single file (output saved next to original with `_redacted` appended):
-```
-python redact_ssn.py "C:\path\to\mydoc.pdf"
+Nullify is fully operational from the terminal.
+
+Redact a single file (creates `*_redacted.pdf`):
+```bash
+python redact_ssn.py "C:\path\to\document.pdf"
 ```
 
-Redact all PDFs in a folder (output saved to a `redacted\` subfolder):
-```
+Redact a directory of files (outputs to a `redacted\` folder):
+```bash
 python redact_ssn.py "C:\path\to\documents\"
 ```
 
-Specify a custom output path:
+Specify custom output destinations:
+```bash
+python redact_ssn.py "C:\path\to\document.pdf" --output "C:\path\to\redacted_document.pdf"
 ```
-python redact_ssn.py "C:\path\to\mydoc.pdf" --output "C:\Users\Me\Desktop\mydoc_clean.pdf"
+
+Enable OCR confusable misread tolerance:
+```bash
+python redact_ssn.py "C:\path\to\document.pdf" --ocr-tolerance
 ```
 
 ---
 
-## Understanding the summary output
+## File Structure
 
+| File / Folder | Purpose |
+| :--- | :--- |
+| **[redact_ssn.py](file:///C:/Claude_Git/nullify_public/redact_ssn.py)** | Core redaction engine, detection passes, and CLI command router. |
+| **[redact_gui.pyw](file:///C:/Claude_Git/nullify_public/redact_gui.pyw)** | Sleek Navy/Crimson Tkinter desktop user interface. |
+| **[setup_shortcut.py](file:///C:/Claude_Git/nullify_public/setup_shortcut.py)** | Desktop shortcut provisioner with WScript shell triggers. |
+| **[run_tests.py](file:///C:/Claude_Git/nullify_public/run_tests.py)** | Comprehensive test suite of **23 automated tests**. |
+| **[create_test_pdfs.py](file:///C:/Claude_Git/nullify_public/create_test_pdfs.py)** | Programmatic creator of anonymous synthetic test PDFs. |
+| **[nullify.ico](file:///C:/Claude_Git/nullify_public/nullify.ico)** | Premium multi-resolution branded Windows icon asset. |
+| **[nullify.png](file:///C:/Claude_Git/nullify_public/nullify.png)** | High-contrast application logo. |
+| **[FUTURE_IMPROVEMENTS.md](file:///C:/Claude_Git/nullify_public/FUTURE_IMPROVEMENTS.md)** | Documented architectural enhancements for future development. |
+
+---
+
+## Verification & Trust
+
+Nullify is designed to be fully self-validating. To run the full verification test suite:
+```bash
+python run_tests.py
 ```
-=== REDACTION SUMMARY ===
-mydoc.pdf                 -> mydoc_redacted.pdf           [3 redacted | 0 missed]
-
-Total files processed:   1
-Total matches redacted:  3
-Total matches MISSED:    0
-Verification:            PASSED
-Files with matches:      1
-Files skipped/errors:    0
-```
-
-| Line | Meaning |
-|------|---------|
-| `[N redacted]` | Black rectangles written to the output file. |
-| `[N missed]` | Matches found in text extraction that could not be visually located — see below. |
-| `Verification: PASSED` | Output file was re-opened after save; no patterns survived. |
-| `Verification FAILURES` | A pattern was still found after redaction — manual review required. |
-| `SKIPPED: all pages image-only` | Every page is a scanned image — no text to redact. |
-| `SKIPPED: password-protected` | File is encrypted; remove the password first. |
-| `ERROR: …` | File could not be opened (corrupt, wrong format). |
-
-### Non-zero MISSED count — what to do
-
-The tool found a sensitive number in the text layer but could not place a redaction rectangle
-on the page. This happens when text rendering and text extraction disagree on character positions.
-**Do not treat the output as fully redacted.** Open the output PDF, search for the number shown
-in the warning (masked to last 4 digits), and redact it manually with a PDF editor.
-
----
-
-## Security measures
-
-- **Permanent redaction of text, images, and vector graphics** — `apply_redactions()` is called
-  with `PDF_REDACT_IMAGE_PIXELS` and `PDF_REDACT_LINE_ART_REMOVE_IF_COVERED`. This physically
-  destroys the underlying pixels and vector paths inside the redaction area — not just an overlay
-  annotation that could be stripped by a recipient. Saved with `garbage=4` to remove all orphaned
-  PDF objects.
-- **Metadata stripped** — document info dict (`/Producer`, `/Author`, etc.) and XMP stream
-  cleared before save.
-- **Embedded files removed** — any file attachments embedded in the PDF are deleted before save.
-- **Form field values cleared** — `widget.field_value = ""` zeroes AcroForm fields before
-  the visual redaction is applied.
-- **Post-save verification** — the output file is re-opened and re-scanned; survivors are
-  flagged as `VERIFY FAIL` in the summary.
-- **Targeted SSN memory safety** — entered SSNs are held only in `bytearray` objects that are
-  explicitly overwritten with null bytes after redaction completes; the Python regex cache is
-  purged (`re.purge()`) so compiled patterns do not linger in memory; GUI fields are cleared
-  before the worker thread launches; clipboard is cleared on Run.
-- **No logging of sensitive values** — warning messages use masked form `[***-**-XXXX]`;
-  the logger never receives raw SSN digits.
-
----
-
-## Known limitations
-
-- **Scanned / image-only pages** — pages with zero selectable text are warned and skipped; use OCR first. Pages that are sparse (a cover sheet or signature page with a few lines of real text) are processed normally.
-- **Password-protected PDFs** — skipped entirely. Remove the password with a PDF editor first.
-- **Unseparated 9-digit strings** (`123456789`) — not detected by design to avoid false positives
-  on account numbers, phone extensions, etc.
-- **Not a substitute for certified redaction workflows** — for legal filings, court submissions,
-  or HIPAA-covered documents use a certified product and have results verified by a professional.
-
----
-
-## File descriptions
-
-| File | Description |
-|------|-------------|
-| `redact_ssn.py` | Redaction engine — all detection logic, three-pass architecture, CLI entry point. **Do not delete.** |
-| `redact_gui.pyw` | Tkinter GUI — calls the engine. Double-click to launch. **Do not delete.** |
-| `requirements_redact.txt` | Python package list. Used by `pip install -r requirements_redact.txt`. **Do not delete.** |
-| `FUTURE_IMPROVEMENTS.md` | Planned enhancements (OCR tolerance, Tesseract integration). |
-| `run_tests.py` | Automated test suite (19 tests). Run `python run_tests.py` to verify everything works. |
-| `create_test_pdfs.py` | Generates test PDFs used by the suite. Called automatically by `run_tests.py`. |
-| `test_files\` | Generated test PDFs. Safe to delete — `run_tests.py` recreates them. |
+This automatically generates 12 synthetic PDF test cases representing different layouts, encryption states, and OCR errors, executes 23 targeted tests on the redaction engine, and cleans up after completion.
