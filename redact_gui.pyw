@@ -1,7 +1,20 @@
-# SSN / EIN Redaction Tool — GUI
+# Nullify — Advanced PDF Redaction Tool (GUI)
+# Copyright (C) 2026 Nullify Code
 #
-# Desktop shortcut: right-click redact_gui.pyw → Send to → Desktop (create shortcut)
-# The .pyw extension runs with pythonw.exe (no console window).
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+# Desktop shortcut provisioner: run setup_shortcut.py to generate a crisp Desktop link.
 
 import os
 import ctypes

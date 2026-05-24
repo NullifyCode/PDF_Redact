@@ -1,72 +1,33 @@
 # Future Improvements
 
-This file tracks planned enhancements that are out of scope for the current release.
-Items are ordered by implementation priority.
+This file tracks planned architectural enhancements and performance optimizations for future development cycles of **Nullify**.
 
 ---
 
-## Item 5 — OCR misread tolerance in pattern matching
+## 🚀 Recently Completed Enhancements
 
-**Problem:** Optical character recognition (OCR) and some low-quality PDF generators
-confuse visually similar characters: the letter O for digit 0, lowercase l or uppercase
-I for digit 1, S for 5. A scanned SSN `1l3-4S-6789` would pass through undetected
-because the current patterns only match `\d` (true digit characters).
+The following major updates were successfully implemented and merged into the core engine on **May 24, 2026**:
 
-**Proposed approach:** Replace `\d` with a character class that includes OCR confusables,
-following the technique used by [JoshData/pdf-redactor](https://github.com/JoshData/pdf-redactor):
-
-```python
-DIGIT_OR_OCR = r'[0-9OoIliS]'
-SSN_PATTERN  = rf'\b(?!000|666){DIGIT_OR_OCR}{{3}}[- ](?!00){DIGIT_OR_OCR}{{2}}[- ](?!0000){DIGIT_OR_OCR}{{4}}\b'
-```
-
-**Considerations:**
-- Increases false-positive risk on text that contains runs of these letters (e.g. `Oil-lo-IlOI`).
-- Only meaningful on PDFs that went through OCR before reaching this tool.
-- Should be offered as an opt-in flag (`--ocr-tolerance`) rather than the default.
+1. **Item 5 — OCR Misread Tolerance:** Fuzzy character classes (`[0-9OoIliS]`) now detect numbers misread by OCR engines due to visual similarity (e.g., matching `l` as `1` or `S` as `5`). Integrates with `--ocr-tolerance` (CLI) and a GUI toggle checkbutton. Features robust post-match validation requiring $\ge 3$ true digits to eliminate false positives in natural language text.
+2. **Item 6 — Scanned Page OCR Redaction:** Added graceful support for scanned/image-only PDFs using Pillow and `pytesseract`. Renders document pages at 300 DPI, runs OCR, translates pixel bounding coordinates into PDF grid space, and applies vector redact annotations. Falls back gracefully with clear, actionable environment instructions if Google Tesseract is missing.
 
 ---
 
-## Item 6 — OCR support for image-only pages
+## 🔮 Next-Generation Roadmap
 
-**Problem:** The tool currently detects image-only pages (pages with fewer than 50
-extractable text characters) and skips them with a warning. Any SSNs printed on a
-scanned or photographed page are invisible to the engine.
+The following list tracks planned optimizations and features for subsequent releases:
 
-**Proposed approach:** Integrate [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
-via `pytesseract` as an optional dependency, following the render-then-OCR strategy
-used by [SpectrePDF](https://github.com/udiram/SpectrePDF):
+### 1. Multithreaded OCR Processing for High-Volume PDFs
+* **Problem:** Running Google Tesseract OCR sequentially on scanned multi-page documents can become slow on standard machines.
+* **Proposed Approach:** Implement a thread pool executor (`concurrent.futures.ThreadPoolExecutor`) to run OCR in parallel across pages. This will optimize CPU core usage and scale processing speeds linearly with local compute capacity.
 
-1. Detect image-only page (existing logic).
-2. Render page to high-resolution raster via `page.get_pixmap(dpi=300)`.
-3. Pass image to Tesseract with `--psm 6` (uniform block of text).
-4. Receive word-level bounding boxes (`image_to_data()` with `Output.DICT`).
-5. Match SSN/EIN patterns against the OCR text.
-6. Map word coordinates back to PDF points (`pixel / dpi * 72`).
-7. Draw solid black rectangles over matched regions on the raster image.
-8. Re-embed the modified raster as the page image.
+### 2. Auto-Detection of Document Page Rotation
+* **Problem:** Scanned pages may be loaded sideways (90°/270°) or upside-down (180°). Tesseract OCR yields degraded accuracy on misrotated pages, and coordinate translations fail if page rotation is ignored.
+* **Proposed Approach:** Query `page.rotation` using PyMuPDF and automatically rotate page coordinates/matrices during coordinate mapping. Integrate Tesseract’s orientation detection (OSD mode) to automatically pre-rotate raw images before running OCR.
 
-**Considerations:**
-- Requires `pytesseract` and a local Tesseract installation — non-trivial first-time setup.
-- Rasterised output loses text searchability (acceptable trade-off for scanned source material).
-- Coordinate mapping between raster pixels and PDF points must account for page rotation.
-- Accuracy depends on scan quality; low-DPI inputs (below 150 DPI) give unreliable results.
-- Should degrade gracefully: if `pytesseract` is not installed, fall back to the current
-  skip-with-warning behaviour and print an install hint.
-- Suggested install guard:
-
-```python
-try:
-    import pytesseract
-    OCR_AVAILABLE = True
-except ImportError:
-    OCR_AVAILABLE = False
-```
-
-**Estimated effort:** Large — 2–3 days including coordinate mapping, tests with real
-scanned PDFs, and graceful fallback handling.
+### 3. Customizable Redaction Appearance
+* **Problem:** The tool currently hardcodes solid black blocks (`(0, 0, 0)`) for all redaction areas. Certain filing workflows prefer solid white blocks, grey textures, or transparent boundaries with customizable border guidelines.
+* **Proposed Approach:** Expose a color picker in the GUI and a `--color` (or `--fill`) argument in the CLI to allow users to select from a set of standard colors (black, white, dark grey, light grey) or input a custom hex code.
 
 ---
-
-*Last updated: 2026-05-22*
-*Improvements 1–4 were implemented in commit history — see git log for details.*
+*Last updated: May 24, 2026*

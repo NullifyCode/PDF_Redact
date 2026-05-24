@@ -1,11 +1,21 @@
 """
-setup_shortcut.py — Create a Desktop shortcut for the SSN/EIN Redaction Tool
-                    with a custom application icon.
+Nullify Shortcut Provisioner
+Copyright (C) 2026 Nullify Code
 
-Steps:
-  1. Save your icon image as  app_icon.png  in this folder.
-  2. Run:  python setup_shortcut.py
-  3. A shortcut with the custom icon appears on your Desktop.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+Description: Generates a premium Desktop shortcut for the Nullify application.
 """
 
 import sys
