@@ -190,7 +190,7 @@ class TestTargetedSSN(_BaseRedactionTest):
             "Form 1040-ES Payment Voucher — Department of the Treasury Internal Revenue Service",
             fontsize=11)
         page.insert_text((72, 100),
-            "4546 74 123456789 PT BAUM 30 0 202612 430",
+            "4546 74 123456789 PT SMITH 30 0 202612 430",
             fontsize=11)
         doc.save(tmp_in)
         doc.close()
@@ -409,6 +409,34 @@ class TestGUISmoke(unittest.TestCase):
         app.destroy()
 
 
+class TestOCRConfusableTolerance(_BaseRedactionTest):
+    input_file  = "test_ocr_confusables.pdf"
+    output_file = "test_ocr_confusables_redacted.pdf"
+
+    def test_ocr_tolerance_enabled(self):
+        # ocr_tolerance=True should redact 3 matches (2 confusables + 1 normal)
+        result = process_single(self.input, self.output, ocr_tolerance=True)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["redacted"], 3, f"expected 3 redacted, got {result['redacted']}")
+        self.assertEqual(result["missed"], 0)
+        
+        out_text = _extract_text(self.output)
+        for number in ("1l3-4S-6789", "l2-34S6789", "123-45-6789"):
+            self.assertNotIn(number, out_text, f"'{number}' still visible in output PDF")
+
+    def test_ocr_tolerance_disabled(self):
+        # ocr_tolerance=False should only redact 1 match (the normal one)
+        result = process_single(self.input, self.output, ocr_tolerance=False)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["redacted"], 1, f"expected 1 redacted, got {result['redacted']}")
+        self.assertEqual(result["missed"], 0)
+        
+        out_text = _extract_text(self.output)
+        self.assertNotIn("123-45-6789", out_text, "123-45-6789 should be redacted")
+        self.assertIn("1l3-4S-6789", out_text, "1l3-4S-6789 should NOT be redacted")
+        self.assertIn("l2-34S6789", out_text, "l2-34S6789 should NOT be redacted")
+
+
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 class VerboseTestResult(unittest.TextTestResult):
@@ -452,6 +480,7 @@ if __name__ == "__main__":
         TestDirectoryMode,
         TestInputEqualsOutput,
         TestGUISmoke,
+        TestOCRConfusableTolerance,
     ]
 
     for cls in test_classes:

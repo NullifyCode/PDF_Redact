@@ -159,6 +159,17 @@ def create_test_corrupt():
     )
 
 
+def create_test_ocr_confusables():
+    """PDF with OCR misread lookalike SSNs: e.g. 1l3-4S-6789 (lowercase L and S for digits)."""
+    text = (
+        "OCR Misread Document (OCR tolerance testing):\n\n"
+        "  Misread SSN:  1l3-4S-6789  (l for 1, S for 5)\n"
+        "  Misread EIN:  l2-34S6789   (l for 1, S for 5)\n"
+        "  Normal SSN:   123-45-6789  (always redacted)\n"
+    )
+    _save_doc(_new_doc_with_text(text), "test_ocr_confusables.pdf")
+
+
 def generate_all(quiet: bool = False):
     TEST_DIR.mkdir(parents=True, exist_ok=True)
     create_test_partial_mask()
@@ -172,12 +183,14 @@ def generate_all(quiet: bool = False):
     create_test_irs_format()
     create_test_encrypted()
     create_test_corrupt()
+    create_test_ocr_confusables()
     if not quiet:
         print(f"Test files created in: {TEST_DIR}")
         for name in ("test_standard.pdf", "test_multi.pdf", "test_clean.pdf",
                      "test_multipage.pdf", "test_image_only.pdf",
                      "test_invalid_ssn.pdf", "test_acroform_ssn.pdf",
-                     "test_irs_format.pdf", "test_encrypted.pdf", "test_corrupt.pdf"):
+                     "test_irs_format.pdf", "test_encrypted.pdf", "test_corrupt.pdf",
+                     "test_ocr_confusables.pdf"):
             print(f"  {name}")
 
 

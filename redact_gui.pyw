@@ -112,6 +112,7 @@ class RedactApp(tk.Tk):
         self._output_var      = tk.StringVar()
         self._status_var      = tk.StringVar(value="Ready")
         self._target_ssn_vars = [tk.StringVar() for _ in range(6)]
+        self._ocr_tolerance_var = tk.BooleanVar(value=False)
         self._last_output     = None   # path shown by the Open button after a successful run
 
         self._build_ui()
@@ -166,6 +167,7 @@ class RedactApp(tk.Tk):
         self._build_mode_cards(body)
         self._build_file_rows(body)
         self._build_target_ssns(body)
+        self._build_options(body)
         self._build_run_button(body)
         self._build_results_panel(body)
 
@@ -233,6 +235,25 @@ class RedactApp(tk.Tk):
             entry.bind("<<Cut>>",   lambda e: "break")
             entry.pack(fill="x", pady=(2, 0))
             self._target_entries.append(entry)
+
+    def _build_options(self, parent):
+        self._section_label(parent, "SETTINGS")
+        
+        opt_frame = tk.Frame(parent, bg=BG)
+        opt_frame.pack(fill="x", pady=(6, 16))
+        
+        cb = tk.Checkbutton(
+            opt_frame,
+            text="Enable OCR Misread Tolerance (matches O for 0, I for 1, S for 5)",
+            variable=self._ocr_tolerance_var,
+            font=FONT_BODY,
+            bg=BG, fg=TEXT,
+            activebackground=BG, activeforeground=TEXT,
+            selectcolor=WHITE,
+            relief="flat", bd=0,
+            cursor="hand2"
+        )
+        cb.pack(anchor="w")
 
     def _build_run_button(self, parent):
         wrap = tk.Frame(parent, bg=BG)
@@ -408,6 +429,7 @@ class RedactApp(tk.Tk):
     def _run(self):
         input_path  = self._input_var.get().strip()
         output_path = self._output_var.get().strip()
+        ocr_tolerance = self._ocr_tolerance_var.get()
 
         if not input_path:
             self._set_status("Error: no input selected.", TERM_ERR)
@@ -440,12 +462,12 @@ class RedactApp(tk.Tk):
 
                 if self._mode == "file":
                     result = process_single(input_path, output_path or None,
-                                            target_ssns=target_ssns)
+                                            target_ssns=target_ssns, ocr_tolerance=ocr_tolerance)
                     result["filename"] = Path(input_path).name
                     results = [result]
                 else:
                     results = process_directory(input_path, output_path or None,
-                                                target_ssns=target_ssns)
+                                                target_ssns=target_ssns, ocr_tolerance=ocr_tolerance)
                     for r in results:
                         if "filename" not in r:
                             r["filename"] = Path(r.get("input", "unknown")).name

@@ -3,12 +3,22 @@ PDF SSN/EIN Redaction Engine
 Usage: python redact_ssn.py <input_pdf_or_dir> [--output <path>]
 """
 
+import io
 import gc
 import re
 import argparse
 import logging
 from pathlib import Path
 import fitz  # PyMuPDF
+
+# Optional Tesseract OCR Support
+try:
+    import pytesseract
+    from PIL import Image
+    pytesseract.get_tesseract_version()
+    HAS_TESSERACT = True
+except Exception:
+    HAS_TESSERACT = False
 
 # Library-safe: callers configure logging; CLI entry point sets up handlers in main().
 logger = logging.getLogger(__name__)
@@ -57,14 +67,36 @@ REDACTED_SUFFIX = "_redacted"
 WIDGET_ROW_BUCKET = 8   # vertical tolerance (points) for grouping widgets on the same row
 
 
-def compile_patterns() -> dict:
+def compile_patterns(ocr_tolerance: bool = False) -> dict:
+    d_class = r'0-9OoIliS' if ocr_tolerance else r'0-9'
+    d = rf'[{d_class}]'
+    mask_chars = r'Xx*#'
+    dm = rf'[{d_class}{mask_chars}]'
+    mask_or_zero = rf'[{mask_chars}0]'
+    sep = '[- ‑– ]'
+    
+    ssn_pat = rf'\b(?!000|666){d}{{3}}{sep}(?!00){d}{{2}}{sep}(?!0000){d}{{4}}\b'
+    ein_pat = rf'\b{d}{{2}}{sep}{d}{{7}}\b'
+    
+    ssn_partial_pat = rf'\b{dm}{{3}}{sep}{dm}{{2}}{sep}[{mask_chars}]{{4}}\b'
+    
+    ssn_partial_zero_pat = (
+        rf'\b(?!{d}{{3}}{sep})'
+        rf'{dm}{{3}}{sep}'
+        rf'{dm}{{2}}{sep}'
+        rf'{mask_or_zero}{{4}}\b'
+    )
+    
+    ein_partial_pat = rf'\b{d}{{2}}{sep}{dm}{{7}}\b'
+
     return {
-        "SSN/ITIN":                    re.compile(SSN_PATTERN),
-        "SSN/ITIN (partial)":          re.compile(SSN_PARTIAL_PATTERN),
-        "SSN/ITIN (partial, 0-masked)": re.compile(_SSN_PARTIAL_ZERO),
-        "EIN":                         re.compile(EIN_PATTERN),
-        "EIN (partial)":               re.compile(EIN_PARTIAL_PATTERN),
+        "SSN/ITIN":                    re.compile(ssn_pat),
+        "SSN/ITIN (partial)":          re.compile(ssn_partial_pat),
+        "SSN/ITIN (partial, 0-masked)": re.compile(ssn_partial_zero_pat),
+        "EIN":                         re.compile(ein_pat),
+        "EIN (partial)":               re.compile(ein_partial_pat),
     }
+
 
 
 def _mask_value(s: str) -> str:
@@ -73,12 +105,16 @@ def _mask_value(s: str) -> str:
     return f"[***-**-{digits[-4:]}]" if len(digits) >= 4 else "[***]"
 
 
-def find_sensitive_matches(text: str, compiled_patterns: dict) -> list:
-    return [
-        (type_name, m.group())
-        for type_name, pattern in compiled_patterns.items()
-        for m in pattern.finditer(text)
-    ]
+def find_sensitive_matches(text: str, compiled_patterns: dict, ocr_tolerance: bool = False) -> list:
+    matches = []
+    for type_name, pattern in compiled_patterns.items():
+        for m in pattern.finditer(text):
+            match_str = m.group()
+            # If ocr_tolerance is True, enforce that the match contains at least 3 true digits
+            if ocr_tolerance and sum(c.isdigit() for c in match_str) < 3:
+                continue
+            matches.append((type_name, match_str))
+    return matches
 
 
 def _any_pattern_matches(parts: list, compiled_patterns: dict) -> bool:
@@ -185,14 +221,15 @@ def _redact_word_proximity(page, compiled_patterns: dict, skip_normalized: set) 
     return redacted
 
 
-def redact_page(page, compiled_patterns: dict, page_text: str = None) -> dict:
+def redact_page(page, compiled_patterns: dict, page_text: str = None,
+                ocr_tolerance: bool = False) -> dict:
     redacted_count = 0
     missed_count = 0
     warnings = []
     p1_found_normalized: set = set()
 
     text = page_text if page_text is not None else page.get_text("text")
-    matches = find_sensitive_matches(text, compiled_patterns)
+    matches = find_sensitive_matches(text, compiled_patterns, ocr_tolerance=ocr_tolerance)
     str_to_type = {m[1]: m[0] for m in matches}
 
     for match_str, type_name in str_to_type.items():
@@ -270,7 +307,79 @@ def verify_redaction(output_path: str, compiled_patterns: dict) -> list:
     return failures
 
 
-def redact_pdf(input_path: str, output_path: str, target_ssns: list = None) -> dict:
+def redact_scanned_page(page, compiled_patterns: dict, ocr_tolerance: bool = False) -> dict:
+    """Redact an image-only page using Pytesseract OCR."""
+    redacted_count = 0
+    # 1. Render page at 300 DPI
+    pix = page.get_pixmap(dpi=300)
+    img_data = pix.tobytes("png")
+    pil_img = Image.open(io.BytesIO(img_data))
+    
+    # 2. Get OCR data
+    ocr_data = pytesseract.image_to_data(pil_img, output_type=pytesseract.Output.DICT)
+    n_boxes = len(ocr_data['text'])
+    
+    # 3. Group words by line
+    lines = {}
+    for i in range(n_boxes):
+        t = ocr_data['text'][i].strip()
+        if not t:
+            continue
+        key = (ocr_data['block_num'][i], ocr_data['line_num'][i])
+        lines.setdefault(key, []).append({
+            "text": t,
+            "left": ocr_data['left'][i],
+            "top": ocr_data['top'][i],
+            "width": ocr_data['width'][i],
+            "height": ocr_data['height'][i]
+        })
+        
+    used_coords = set()
+    
+    def to_pdf_rect(l, t, w, h):
+        return fitz.Rect(l * 72.0 / 300.0, t * 72.0 / 300.0, 
+                         (l + w) * 72.0 / 300.0, (t + h) * 72.0 / 300.0)
+    
+    for line_words in lines.values():
+        line_words.sort(key=lambda x: x['left'])
+        
+        # Pass A: Single word match
+        for idx, w in enumerate(line_words):
+            if _any_pattern_matches([w['text']], compiled_patterns):
+                if ocr_tolerance and sum(c.isdigit() for c in w['text']) < 3:
+                    continue
+                rect = to_pdf_rect(w['left'], w['top'], w['width'], w['height'])
+                page.add_redact_annot(rect, fill=FILL_COLOR, text="", cross_out=False)
+                redacted_count += 1
+                used_coords.add(idx)
+        
+        # Pass B: Proximity sliding window (sizes 2 to 4)
+        for window in range(2, 5):
+            for idx in range(len(line_words) - window + 1):
+                if any((idx + j) in used_coords for j in range(window)):
+                    continue
+                group = line_words[idx : idx + window]
+                texts = [w['text'] for w in group]
+                
+                if _any_pattern_matches(texts, compiled_patterns):
+                    if ocr_tolerance and sum(c.isdigit() for c in "".join(texts)) < 3:
+                        continue
+                    for w in group:
+                        rect = to_pdf_rect(w['left'], w['top'], w['width'], w['height'])
+                        page.add_redact_annot(rect, fill=FILL_COLOR, text="", cross_out=False)
+                    redacted_count += 1
+                    for j in range(window):
+                        used_coords.add(idx + j)
+                        
+    page.apply_redactions(
+        images=fitz.PDF_REDACT_IMAGE_PIXELS,
+        graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
+    )
+    return {"redacted": redacted_count, "missed": 0, "warnings": []}
+
+
+def redact_pdf(input_path: str, output_path: str, target_ssns: list = None,
+               ocr_tolerance: bool = False) -> dict:
     try:
         doc = fitz.open(input_path)
     except fitz.FileDataError as e:
@@ -281,7 +390,7 @@ def redact_pdf(input_path: str, output_path: str, target_ssns: list = None) -> d
         doc.close()
         return {"status": "encrypted"}
 
-    compiled_patterns = compile_patterns()
+    compiled_patterns = compile_patterns(ocr_tolerance=ocr_tolerance)
 
     if target_ssns:
         for i, ssn in enumerate(target_ssns, 1):
@@ -300,14 +409,30 @@ def redact_pdf(input_path: str, output_path: str, target_ssns: list = None) -> d
     for page_num, page in enumerate(doc, start=1):
         page_text = page.get_text("text")          # single extraction per page
         if is_likely_image_only(page, page_text=page_text):
-            msg = "Page skipped — likely image-only (OCR required)"
-            logger.warning("p.%d: %s", page_num, msg)
-            all_warnings.append(f"WARNING p.{page_num}: {msg}")
-            image_only_pages += 1
-            page_results.append({"page": page_num, "redacted": 0, "missed": 0, "skipped": True})
+            if HAS_TESSERACT:
+                logger.warning("p.%d: Page is image-only. Running OCR redaction...", page_num)
+                result = redact_scanned_page(page, compiled_patterns, ocr_tolerance=ocr_tolerance)
+                total_redacted += result["redacted"]
+                page_results.append({
+                    "page": page_num,
+                    "redacted": result["redacted"],
+                    "missed": 0,
+                    "skipped": False,
+                    "ocr_applied": True
+                })
+            else:
+                msg = "Page skipped — likely image-only (Tesseract OCR required for automatic scan redaction)"
+                logger.warning("p.%d: %s", page_num, msg)
+                all_warnings.append(
+                    f"WARNING p.{page_num}: {msg}. "
+                    f"To enable automatic scanned page redaction, please install Google Tesseract OCR "
+                    f"and 'pytesseract' (pip install pytesseract)."
+                )
+                image_only_pages += 1
+                page_results.append({"page": page_num, "redacted": 0, "missed": 0, "skipped": True})
             continue
 
-        result = redact_page(page, compiled_patterns, page_text)
+        result = redact_page(page, compiled_patterns, page_text, ocr_tolerance=ocr_tolerance)
         for w in result["warnings"]:
             all_warnings.append(f"WARNING p.{page_num}: {w}")
         total_redacted += result["redacted"]
@@ -347,7 +472,7 @@ def redact_pdf(input_path: str, output_path: str, target_ssns: list = None) -> d
 
 
 def process_single(input_path: str, output_path: str = None,
-                   target_ssns: list = None) -> dict:
+                   target_ssns: list = None, ocr_tolerance: bool = False) -> dict:
     input_p = Path(input_path)
 
     if output_path is None:
@@ -356,7 +481,7 @@ def process_single(input_path: str, output_path: str = None,
     if str(Path(input_path).resolve()) == str(Path(output_path).resolve()):
         return {"status": "error", "error": "Input and output paths are the same — refusing to overwrite source"}
 
-    result = redact_pdf(input_path, output_path, target_ssns=target_ssns)
+    result = redact_pdf(input_path, output_path, target_ssns=target_ssns, ocr_tolerance=ocr_tolerance)
     result["input"] = input_path
     if "output" not in result:
         result["output"] = output_path
@@ -364,7 +489,7 @@ def process_single(input_path: str, output_path: str = None,
 
 
 def process_directory(input_dir: str, output_dir: str = None,
-                      target_ssns: list = None) -> list:
+                      target_ssns: list = None, ocr_tolerance: bool = False) -> list:
     input_p = Path(input_dir)
 
     if output_dir is None:
@@ -379,7 +504,7 @@ def process_directory(input_dir: str, output_dir: str = None,
 
     for pdf_file in pdf_files:
         out_file = output_p / (pdf_file.stem + REDACTED_SUFFIX + pdf_file.suffix)
-        result = process_single(str(pdf_file), str(out_file), target_ssns=target_ssns)
+        result = process_single(str(pdf_file), str(out_file), target_ssns=target_ssns, ocr_tolerance=ocr_tolerance)
         result["filename"] = pdf_file.name
         results.append(result)
 
@@ -472,17 +597,18 @@ def main():
     parser = argparse.ArgumentParser(description="Redact SSNs and EINs from PDF files")
     parser.add_argument("input", help="Path to a PDF file or directory of PDFs")
     parser.add_argument("--output", help="Custom output path (file or directory)", default=None)
+    parser.add_argument("--ocr-tolerance", action="store_true", help="Enable OCR confusable misread tolerance")
     args = parser.parse_args()
 
     input_p = Path(args.input)
 
     if input_p.is_dir():
-        results = process_directory(str(input_p), args.output)
+        results = process_directory(str(input_p), args.output, ocr_tolerance=args.ocr_tolerance)
         for r in results:
             if "filename" not in r:
                 r["filename"] = Path(r.get("input", "unknown")).name
     elif input_p.is_file():
-        result = process_single(str(input_p), args.output)
+        result = process_single(str(input_p), args.output, ocr_tolerance=args.ocr_tolerance)
         result["filename"] = input_p.name
         results = [result]
     else:
