@@ -144,6 +144,10 @@ class RedactApp(tk.Tk):
         inner = tk.Frame(hdr, bg=PANEL, padx=26, pady=20)
         inner.pack(fill="x")
 
+        # Right-aligned GNU GPL v3 license label at the top
+        tk.Label(inner, text="GNU GPL v3", bg=PANEL,
+                 font=FONT_STATUS, fg=TEXT_DIM).pack(side="right", anchor="ne", pady=(5, 0))
+
         row = tk.Frame(inner, bg=PANEL)
         row.pack(anchor="w")
 
@@ -346,10 +350,6 @@ class RedactApp(tk.Tk):
         self._status_lbl = tk.Label(bar, textvariable=self._status_var,
                                     bg=PANEL, font=FONT_STATUS, fg=TEXT_DIM)
         self._status_lbl.pack(side="left", padx=(5, 0))
-
-        license_lbl = tk.Label(bar, text="GNU GPL v3", bg=PANEL,
-                               font=FONT_STATUS, fg=TEXT_DIM)
-        license_lbl.pack(side="right")
 
     # ── Widget factories ──────────────────────────────────────────────────────
 
